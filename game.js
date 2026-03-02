@@ -16,172 +16,168 @@ let trollIdCounter = 0;
 
 // ========== EFFETS ==========
 const effects = {
-    BurnEffect: class {
-        constructor(troll) {
-            troll.burning = true;
-            const burnGraphics = troll.scene.add.graphics().setDepth(8);
-            burnGraphics.lineStyle(2, 0xff0000, 0.8);
-            burnGraphics.strokeCircle(troll.sprite.x, troll.sprite.y, 20);
-            troll.scene.time.addEvent({
-                delay: 1000,
-                callback: () => {
-                    troll.health -= troll.maxHealth * 0.05;
-                    troll.healthBar.setScale(troll.health / troll.maxHealth, 1);
-                },
-                repeat: 2
-            });
-            troll.scene.time.delayedCall(3000, () => {
-                troll.burning = false;
-                burnGraphics.destroy();
-            });
-        }
+    BurnEffect: function(troll) {
+        troll.burning = true;
+        const burnGraphics = troll.scene.add.graphics().setDepth(8);
+        burnGraphics.lineStyle(2, 0xff0000, 0.8);
+        burnGraphics.strokeCircle(troll.sprite.x, troll.sprite.y, 20);
+        troll.scene.time.addEvent({
+            delay: 1000,
+            callback: () => {
+                troll.health -= troll.maxHealth * 0.05;
+                troll.healthBar.setScale(troll.health / troll.maxHealth, 1);
+            },
+            repeat: 2
+        });
+        troll.scene.time.delayedCall(3000, () => {
+            troll.burning = false;
+            burnGraphics.destroy();
+        });
     },
-    FreezeEffect: class {
-        constructor(troll) {
-            troll.frozen = true;
-            troll.originalSpeed = troll.speed;
-            troll.speed = 0;
-            const freezeGraphics = troll.scene.add.graphics().setDepth(8);
-            freezeGraphics.fillStyle(0x00FFFF, 0.5);
-            freezeGraphics.fillCircle(troll.sprite.x, troll.sprite.y, 25);
-            troll.scene.time.delayedCall(2000, () => {
-                troll.frozen = false;
-                troll.speed = troll.originalSpeed;
-                freezeGraphics.destroy();
-            });
-        }
+    FreezeEffect: function(troll) {
+        troll.frozen = true;
+        troll.originalSpeed = troll.speed;
+        troll.speed = 0;
+        const freezeGraphics = troll.scene.add.graphics().setDepth(8);
+        freezeGraphics.fillStyle(0x00FFFF, 0.5);
+        freezeGraphics.fillCircle(troll.sprite.x, troll.sprite.y, 25);
+        troll.scene.time.delayedCall(2000, () => {
+            troll.frozen = false;
+            troll.speed = troll.originalSpeed;
+            freezeGraphics.destroy();
+        });
     },
-    HealEffect: class {
-        constructor(troll) {
-            const healGraphics = troll.scene.add.graphics().setDepth(8);
-            healGraphics.lineStyle(2, 0x00ff00, 0.8);
-            healGraphics.strokeCircle(troll.sprite.x, troll.sprite.y, 20);
-            troll.scene.time.addEvent({
-                delay: 1000,
-                callback: () => {
-                    troll.health = Math.min(troll.maxHealth, troll.health + troll.maxHealth * 0.05);
-                    troll.healthBar.setScale(troll.health / troll.maxHealth, 1);
-                },
-                repeat: 2
-            });
-            troll.scene.time.delayedCall(3000, () => healGraphics.destroy());
-        }
+    HealEffect: function(troll) {
+        const healGraphics = troll.scene.add.graphics().setDepth(8);
+        healGraphics.lineStyle(2, 0x00ff00, 0.8);
+        healGraphics.strokeCircle(troll.sprite.x, troll.sprite.y, 20);
+        troll.scene.time.addEvent({
+            delay: 1000,
+            callback: () => {
+                troll.health = Math.min(troll.maxHealth, troll.health + troll.maxHealth * 0.05);
+                troll.healthBar.setScale(troll.health / troll.maxHealth, 1);
+            },
+            repeat: 2
+        });
+        troll.scene.time.delayedCall(3000, () => healGraphics.destroy());
     }
 };
 
 // ========== CLASSE DE BASE POUR LES ATTAQUES ==========
-class BaseAttack {
-    constructor(scene, x, y, targetX, targetY) {
-        this.scene = scene;
-        this.x = x;
-        this.y = y;
-        this.targetX = targetX;
-        this.targetY = targetY;
-        this.graphics = scene.add.graphics({x, y}).setDepth(6);
-    }
+function BaseAttack(scene, x, y, targetX, targetY) {
+    this.scene = scene;
+    this.x = x;
+    this.y = y;
+    this.targetX = targetX;
+    this.targetY = targetY;
+    this.graphics = scene.add.graphics({x: x, y: y}).setDepth(6);
+}
 
-    // Méthode à implémenter par les classes filles
-    draw() {
-        throw new Error("La méthode draw() doit être implémentée.");
-    }
+// Méthodes de base
+BaseAttack.prototype.draw = function() {
+    throw new Error("La méthode draw() doit être implémentée.");
+};
 
-    // Méthode pour appliquer les dégâts et effets
-    applyEffects() {
-        const currentTrolls = this.scene.trolls || [];
-        currentTrolls.forEach(troll => {
-            if (troll && troll.sprite) {
-                const dist = Phaser.Math.Distance.Between(
-                    this.graphics.x, this.graphics.y,
-                    troll.sprite.x, troll.sprite.y
-                );
-                if (dist < (this.radius || 30)) {
-                    troll.health -= troll.maxHealth * (this.damagePercent || 0.2);
-                    if (troll.healthBar) {
-                        troll.healthBar.setScale(troll.health / troll.maxHealth, 1);
-                    }
-                    if (this.effect && this.scene.effects[this.effect]) {
-                        troll.effects.push(new this.scene.effects[this.effect](troll));
-                    }
+BaseAttack.prototype.applyEffects = function() {
+    const currentTrolls = this.scene.trolls || [];
+    currentTrolls.forEach(troll => {
+        if (troll && troll.sprite) {
+            const dist = Phaser.Math.Distance.Between(
+                this.graphics.x, this.graphics.y,
+                troll.sprite.x, troll.sprite.y
+            );
+            if (dist < (this.radius || 30)) {
+                troll.health -= troll.maxHealth * (this.damagePercent || 0.2);
+                if (troll.healthBar) {
+                    troll.healthBar.setScale(troll.health / troll.maxHealth, 1);
+                }
+                if (this.effect && this.scene.effects[this.effect]) {
+                    this.scene.effects[this.effect](troll);
                 }
             }
-        });
-    }
-
-    // Animation par défaut
-    animate() {
-        const distance = Phaser.Math.Distance.Between(this.x, this.y, this.targetX, this.targetY);
-        const duration = distance / (this.speed || 500);
-        this.scene.tweens.add({
-            targets: this.graphics,
-            x: this.targetX,
-            y: this.targetY,
-            duration: duration * 1000,
-            onUpdate: () => {
-                this.graphics.clear();
-                this.draw();
-            },
-            onComplete: () => {
-                this.applyEffects();
-                if (this.graphics) this.graphics.destroy();
-            }
-        });
-    }
-}
-
-// ========== CLASSE FIREBALL (EXEMPLE) ==========
-class Fireball extends BaseAttack {
-    constructor(scene, x, y, targetX, targetY) {
-        super(scene, x, y, targetX, targetY);
-        this.damagePercent = 0.3;
-        this.speed = 600;
-        this.radius = 22;
-        this.effect = "Burn";
-        this.color1 = 0xFF4500;
-        this.color2 = 0xFFA500;
-        this.flameIntensity = 0;
-    }
-
-    draw() {
-        this.flameIntensity = (this.flameIntensity + 0.05) % 1;
-        this.graphics.fillStyle(this.color1, 0.9);
-        this.graphics.fillCircle(0, 0, this.radius);
-        for (let i = 0; i < 5; i++) {
-            const angle = (i / 5) * Math.PI * 2 + this.flameIntensity;
-            const flameSize = this.radius * (0.3 + Math.sin(this.flameIntensity * 3) * 0.1);
-            const flameX = Math.cos(angle) * (this.radius * 0.7);
-            const flameY = Math.sin(angle) * (this.radius * 0.7);
-            this.graphics.fillStyle(this.color2, 0.7 - Math.sin(this.flameIntensity) * 0.2);
-            this.graphics.fillCircle(flameX, flameY, flameSize);
         }
-    }
+    });
+};
+
+BaseAttack.prototype.animate = function() {
+    const distance = Phaser.Math.Distance.Between(this.x, this.y, this.targetX, this.targetY);
+    const duration = distance / (this.speed || 500);
+    this.scene.tweens.add({
+        targets: this.graphics,
+        x: this.targetX,
+        y: this.targetY,
+        duration: duration * 1000,
+        onUpdate: () => {
+            this.graphics.clear();
+            this.draw();
+        },
+        onComplete: () => {
+            this.applyEffects();
+            if (this.graphics) this.graphics.destroy();
+        }
+    });
+};
+
+// ========== CLASSE FIREBALL ==========
+function Fireball(scene, x, y, targetX, targetY) {
+    BaseAttack.call(this, scene, x, y, targetX, targetY);
+    this.damagePercent = 0.3;
+    this.speed = 600;
+    this.radius = 22;
+    this.effect = "Burn";
+    this.color1 = 0xFF4500;
+    this.color2 = 0xFFA500;
+    this.flameIntensity = 0;
 }
+
+Fireball.prototype = Object.create(BaseAttack.prototype);
+Fireball.prototype.constructor = Fireball;
+
+Fireball.prototype.draw = function() {
+    this.graphics.clear();
+    this.flameIntensity = (this.flameIntensity + 0.05) % 1;
+    this.graphics.fillStyle(this.color1, 0.9);
+    this.graphics.fillCircle(0, 0, this.radius);
+    for (let i = 0; i < 5; i++) {
+        const angle = (i / 5) * Math.PI * 2 + this.flameIntensity;
+        const flameSize = this.radius * (0.3 + Math.sin(this.flameIntensity * 3) * 0.1);
+        const flameX = Math.cos(angle) * (this.radius * 0.7);
+        const flameY = Math.sin(angle) * (this.radius * 0.7);
+        this.graphics.fillStyle(this.color2, 0.7 - Math.sin(this.flameIntensity) * 0.2);
+        this.graphics.fillCircle(flameX, flameY, flameSize);
+    }
+};
 
 // ========== FONCTION POUR CRÉER DES ATTAQUES DYNAMIQUES ==========
 function createAttackFromMistral(attackCode) {
     try {
-        // 1. Nettoyage du code
+        // Nettoyage du code
         const cleanCode = attackCode
             .replace(/`/g, '')
+            .replace(/extends BaseAttack/g, '') // Supprime l'héritage problématique
+            .replace(/constructor\([^)]*\)/, 'constructor(scene, x, y, targetX, targetY)')
             .trim();
 
-        // 2. Extraction du nom de la classe
+        // Extraction du nom de la classe
         const classNameMatch = cleanCode.match(/class (\w+)/);
         if (!classNameMatch) throw new Error("Format de classe invalide.");
 
         const className = classNameMatch[1];
 
-        // 3. Création dynamique de la classe
-        const classDefinition = cleanCode
-            .replace(/class \w+/, `class ${className} extends BaseAttack`)
-            .replace(/constructor\([^)]*\)/, 'constructor(scene, x, y, targetX, targetY)');
-
-        // 4. Évaluation sécurisée du code
-        const AttackClass = Function(`
-            ${classDefinition}
+        // Construction du code final
+        const finalCode = `
+            function ${className}(scene, x, y, targetX, targetY) {
+                BaseAttack.call(this, scene, x, y, targetX, targetY);
+                ${cleanCode.replace(/class \w+.*?\{/, '').replace(/\}/, '')}
+            }
+            ${className}.prototype = Object.create(BaseAttack.prototype);
+            ${className}.prototype.constructor = ${className};
             return ${className};
-        `)();
+        `;
 
-        return AttackClass;
+        // Création dynamique de la classe
+        const constructor = new Function('BaseAttack', finalCode)(BaseAttack);
+        return constructor;
 
     } catch (error) {
         console.error("Erreur dans createAttackFromMistral:", error);
@@ -535,67 +531,69 @@ class GameScene extends Phaser.Scene {
 
     // Génération d'attaques avec Mistral (ou fallback)
     async generateAttackWithMistral(userRequest) {
-        // Exemple de code prédéfini (remplacé par l'API plus tard)
+        // Exemples prédéfinis
         const attackName = userRequest.replace(/\s+/g, '').toLowerCase();
         const examples = {
             "fireball": `
-                class Fireball extends BaseAttack {
-                    constructor(scene, x, y, targetX, targetY) {
-                        super(scene, x, y, targetX, targetY);
-                        this.damagePercent = 0.3;
-                        this.speed = 600;
-                        this.radius = 22;
-                        this.effect = "Burn";
-                        this.color1 = 0xFF4500;
-                        this.color2 = 0xFFA500;
-                        this.flameIntensity = 0;
-                    }
-                    draw() {
-                        this.flameIntensity = (this.flameIntensity + 0.05) % 1;
-                        this.graphics.fillStyle(this.color1, 0.9);
-                        this.graphics.fillCircle(0, 0, this.radius);
-                        for (let i = 0; i < 5; i++) {
-                            const angle = (i / 5) * Math.PI * 2 + this.flameIntensity;
-                            const flameSize = this.radius * (0.3 + Math.sin(this.flameIntensity * 3) * 0.1);
-                            const flameX = Math.cos(angle) * (this.radius * 0.7);
-                            const flameY = Math.sin(angle) * (this.radius * 0.7);
-                            this.graphics.fillStyle(this.color2, 0.7 - Math.sin(this.flameIntensity) * 0.2);
-                            this.graphics.fillCircle(flameX, flameY, flameSize);
-                        }
-                    }
+                function Fireball(scene, x, y, targetX, targetY) {
+                    BaseAttack.call(this, scene, x, y, targetX, targetY);
+                    this.damagePercent = 0.3;
+                    this.speed = 600;
+                    this.radius = 22;
+                    this.effect = "Burn";
+                    this.color1 = 0xFF4500;
+                    this.color2 = 0xFFA500;
+                    this.flameIntensity = 0;
                 }
+                Fireball.prototype = Object.create(BaseAttack.prototype);
+                Fireball.prototype.constructor = Fireball;
+                Fireball.prototype.draw = function() {
+                    this.graphics.clear();
+                    this.flameIntensity = (this.flameIntensity + 0.05) % 1;
+                    this.graphics.fillStyle(this.color1, 0.9);
+                    this.graphics.fillCircle(0, 0, this.radius);
+                    for (let i = 0; i < 5; i++) {
+                        const angle = (i / 5) * Math.PI * 2 + this.flameIntensity;
+                        const flameSize = this.radius * (0.3 + Math.sin(this.flameIntensity * 3) * 0.1);
+                        const flameX = Math.cos(angle) * (this.radius * 0.7);
+                        const flameY = Math.sin(angle) * (this.radius * 0.7);
+                        this.graphics.fillStyle(this.color2, 0.7 - Math.sin(this.flameIntensity) * 0.2);
+                        this.graphics.fillCircle(flameX, flameY, flameSize);
+                    }
+                };
             `,
             "vagueglaceeceleste": `
-                class VagueGlaceeCeleste extends BaseAttack {
-                    constructor(scene, x, y, targetX, targetY) {
-                        super(scene, x, y, targetX, targetY);
-                        this.damagePercent = 0.2;
-                        this.speed = 400;
-                        this.radius = 35;
-                        this.effect = "Freeze";
-                        this.color1 = 0xE6F7FF;
-                        this.color2 = 0xB3E0FF;
-                        this.pulsePhase = 0;
-                    }
-                    draw() {
-                        this.pulsePhase = (this.pulsePhase + 0.02) % 1;
-                        const pulseScale = 1 + Math.sin(this.pulsePhase) * 0.15;
-                        this.graphics.fillStyle(this.color1, 0.8);
-                        this.graphics.fillEllipse(0, 0, this.radius * pulseScale, this.radius * 0.6 * pulseScale);
-                        this.graphics.lineStyle(2, this.color2, 0.9);
-                        for (let i = 0; i < 3; i++) {
-                            const waveRadius = this.radius * (0.7 + i * 0.2) * pulseScale;
-                            this.graphics.strokeCircle(0, 0, waveRadius);
-                        }
-                        this.graphics.fillStyle(0xFFFFFF, 0.6);
-                        for (let i = 0; i < 6; i++) {
-                            const angle = (i / 6) * Math.PI * 2;
-                            const starX = Math.cos(angle) * (this.radius * 0.8 * pulseScale);
-                            const starY = Math.sin(angle) * (this.radius * 0.8 * pulseScale);
-                            this.graphics.fillStar(starX, starY, 3, 2, 3, 3);
-                        }
-                    }
+                function VagueGlaceeCeleste(scene, x, y, targetX, targetY) {
+                    BaseAttack.call(this, scene, x, y, targetX, targetY);
+                    this.damagePercent = 0.2;
+                    this.speed = 400;
+                    this.radius = 35;
+                    this.effect = "Freeze";
+                    this.color1 = 0xE6F7FF;
+                    this.color2 = 0xB3E0FF;
+                    this.pulsePhase = 0;
                 }
+                VagueGlaceeCeleste.prototype = Object.create(BaseAttack.prototype);
+                VagueGlaceeCeleste.prototype.constructor = VagueGlaceeCeleste;
+                VagueGlaceeCeleste.prototype.draw = function() {
+                    this.graphics.clear();
+                    this.pulsePhase = (this.pulsePhase + 0.02) % 1;
+                    const pulseScale = 1 + Math.sin(this.pulsePhase) * 0.15;
+                    this.graphics.fillStyle(this.color1, 0.8);
+                    this.graphics.fillEllipse(0, 0, this.radius * pulseScale, this.radius * 0.6 * pulseScale);
+                    this.graphics.lineStyle(2, this.color2, 0.9);
+                    for (let i = 0; i < 3; i++) {
+                        const waveRadius = this.radius * (0.7 + i * 0.2) * pulseScale;
+                        this.graphics.strokeCircle(0, 0, waveRadius);
+                    }
+                    this.graphics.fillStyle(0xFFFFFF, 0.6);
+                    for (let i = 0; i < 6; i++) {
+                        const angle = (i / 6) * Math.PI * 2;
+                        const starX = Math.cos(angle) * (this.radius * 0.8 * pulseScale);
+                        const starY = Math.sin(angle) * (this.radius * 0.8 * pulseScale);
+                        this.graphics.fillStar(starX, starY, 3, 2, 3, 3);
+                    }
+                };
             `
         };
         return examples[attackName] || examples["fireball"];
@@ -623,19 +621,19 @@ class GameScene extends Phaser.Scene {
                         - speed (300-1000)
                         - radius (10-50)
                         Format strict :
-                        class NomAttaque extends BaseAttack {
-                            constructor(scene, x, y, targetX, targetY) {
-                                super(scene, x, y, targetX, targetY);
-                                this.damagePercent = [valeur];
-                                this.speed = [valeur];
-                                this.radius = [valeur];
-                                this.effect = "[effet]";
-                                // ... autres propriétés
-                            }
-                            draw() {
-                                // Code pour dessiner l'attaque
-                            }
-                        }`
+                        function NomAttaque(scene, x, y, targetX, targetY) {
+                            BaseAttack.call(this, scene, x, y, targetX, targetY);
+                            this.damagePercent = [valeur];
+                            this.speed = [valeur];
+                            this.radius = [valeur];
+                            this.effect = "[effet]";
+                            // ... autres propriétés
+                        }
+                        NomAttaque.prototype = Object.create(BaseAttack.prototype);
+                        NomAttaque.prototype.constructor = NomAttaque;
+                        NomAttaque.prototype.draw = function() {
+                            // Code pour dessiner l'attaque
+                        };`
                     }],
                     temperature: 0.5,
                     max_tokens: 200
