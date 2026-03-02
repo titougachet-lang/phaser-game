@@ -160,7 +160,7 @@ class MenuScene extends Phaser.Scene {
     create() {
         const { width, height } = this.cameras.main;
         this.add.rectangle(0, 0, width, height, 0x000000).setOrigin(0, 0);
-        this.add.text(width/2, height/2 - 100, 'Invasion de Trolls', {
+        this.add.text(width/2, height/2 - 100, 'the sorcerer supreme', {
             fontSize: '48px', fill: '#fff'
         }).setOrigin(0.5);
         const playButton = this.add.rectangle(width/2, height/2, 200, 60, 0x00aa00)
@@ -663,3 +663,4 @@ const config = {
 
 // Initialisation du jeu
 const game = new Phaser.Game(config);
+
