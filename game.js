@@ -34,6 +34,7 @@ const effects = {
             burnGraphics.destroy();
         });
     },
+
     FreezeEffect: function(troll) {
         troll.frozen = true;
         troll.originalSpeed = troll.speed;
@@ -47,6 +48,7 @@ const effects = {
             freezeGraphics.destroy();
         });
     },
+
     HealEffect: function(troll) {
         const healGraphics = troll.scene.add.graphics().setDepth(8);
         healGraphics.lineStyle(2, 0x00ff00, 0.8);
@@ -63,64 +65,68 @@ const effects = {
     }
 };
 
-// ========== CLASSE DE BASE POUR LES ATTAQUES ==========
-function BaseAttack(scene, x, y, targetX, targetY) {
+// ========== FONCTION DE BASE POUR LES ATTAQUES ==========
+function createAttackProperties(attack) {
+    // Ajoute les méthodes par défaut si elles n'existent pas
+    if (typeof attack.draw !== 'function') {
+        attack.draw = function() {
+            this.graphics.fillStyle(0xFF4500, 0.8);
+            this.graphics.fillCircle(0, 0, this.radius || 20);
+        };
+    }
+
+    if (typeof attack.animate !== 'function') {
+        attack.animate = function() {
+            const distance = Phaser.Math.Distance.Between(this.x, this.y, this.targetX, this.targetY);
+            const duration = distance / (this.speed || 500);
+            this.scene.tweens.add({
+                targets: this.graphics,
+                x: this.targetX,
+                y: this.targetY,
+                duration: duration * 1000,
+                onUpdate: () => {
+                    this.graphics.clear();
+                    this.draw();
+                },
+                onComplete: () => {
+                    this.applyEffects();
+                    if (this.graphics) this.graphics.destroy();
+                }
+            });
+        };
+    }
+
+    if (typeof attack.applyEffects !== 'function') {
+        attack.applyEffects = function() {
+            const currentTrolls = this.scene.trolls || [];
+            currentTrolls.forEach(troll => {
+                if (troll && troll.sprite) {
+                    const dist = Phaser.Math.Distance.Between(
+                        this.graphics.x, this.graphics.y,
+                        troll.sprite.x, troll.sprite.y
+                    );
+                    if (dist < (this.radius || 30)) {
+                        troll.health -= troll.maxHealth * (this.damagePercent || 0.2);
+                        if (troll.healthBar) {
+                            troll.healthBar.setScale(troll.health / troll.maxHealth, 1);
+                        }
+                        if (this.effect && this.scene.effects[this.effect]) {
+                            troll.effects.push(new this.scene.effects[this.effect](troll));
+                        }
+                    }
+                }
+            });
+        };
+    }
+}
+
+// ========== CLASSE FIREBALL (EXEMPLE) ==========
+function Fireball(scene, x, y, targetX, targetY) {
     this.scene = scene;
     this.x = x;
     this.y = y;
     this.targetX = targetX;
     this.targetY = targetY;
-    this.graphics = scene.add.graphics({x: x, y: y}).setDepth(6);
-}
-
-// Méthodes de base
-BaseAttack.prototype.draw = function() {
-    throw new Error("La méthode draw() doit être implémentée.");
-};
-
-BaseAttack.prototype.applyEffects = function() {
-    const currentTrolls = this.scene.trolls || [];
-    currentTrolls.forEach(troll => {
-        if (troll && troll.sprite) {
-            const dist = Phaser.Math.Distance.Between(
-                this.graphics.x, this.graphics.y,
-                troll.sprite.x, troll.sprite.y
-            );
-            if (dist < (this.radius || 30)) {
-                troll.health -= troll.maxHealth * (this.damagePercent || 0.2);
-                if (troll.healthBar) {
-                    troll.healthBar.setScale(troll.health / troll.maxHealth, 1);
-                }
-                if (this.effect && this.scene.effects[this.effect]) {
-                    this.scene.effects[this.effect](troll);
-                }
-            }
-        }
-    });
-};
-
-BaseAttack.prototype.animate = function() {
-    const distance = Phaser.Math.Distance.Between(this.x, this.y, this.targetX, this.targetY);
-    const duration = distance / (this.speed || 500);
-    this.scene.tweens.add({
-        targets: this.graphics,
-        x: this.targetX,
-        y: this.targetY,
-        duration: duration * 1000,
-        onUpdate: () => {
-            this.graphics.clear();
-            this.draw();
-        },
-        onComplete: () => {
-            this.applyEffects();
-            if (this.graphics) this.graphics.destroy();
-        }
-    });
-};
-
-// ========== CLASSE FIREBALL ==========
-function Fireball(scene, x, y, targetX, targetY) {
-    BaseAttack.call(this, scene, x, y, targetX, targetY);
     this.damagePercent = 0.3;
     this.speed = 600;
     this.radius = 22;
@@ -128,10 +134,11 @@ function Fireball(scene, x, y, targetX, targetY) {
     this.color1 = 0xFF4500;
     this.color2 = 0xFFA500;
     this.flameIntensity = 0;
-}
+    this.graphics = scene.add.graphics({x: x, y: y}).setDepth(6);
 
-Fireball.prototype = Object.create(BaseAttack.prototype);
-Fireball.prototype.constructor = Fireball;
+    // Ajoute les méthodes par défaut
+    createAttackProperties(this);
+}
 
 Fireball.prototype.draw = function() {
     this.graphics.clear();
@@ -149,38 +156,29 @@ Fireball.prototype.draw = function() {
 };
 
 // ========== FONCTION POUR CRÉER DES ATTAQUES DYNAMIQUES ==========
-function createAttackFromMistral(attackCode) {
+function createAttackFromCode(attackCode) {
     try {
         // Nettoyage du code
         const cleanCode = attackCode
             .replace(/`/g, '')
-            .replace(/extends BaseAttack/g, '') // Supprime l'héritage problématique
-            .replace(/constructor\([^)]*\)/, 'constructor(scene, x, y, targetX, targetY)')
+            .replace(/class \w+/, 'function Attack')
+            .replace(/extends \w+/, '')
+            .replace(/constructor\([^)]*\)/, 'function Attack(scene, x, y, targetX, targetY)')
+            .replace(/}/g, '}; createAttackProperties(this);')
             .trim();
 
-        // Extraction du nom de la classe
-        const classNameMatch = cleanCode.match(/class (\w+)/);
-        if (!classNameMatch) throw new Error("Format de classe invalide.");
+        // Création de la fonction d'attaque
+        const attackFunction = new Function('return ' + cleanCode)();
 
-        const className = classNameMatch[1];
+        // Ajoute les propriétés de base si elles manquent
+        attackFunction.prototype.draw = attackFunction.prototype.draw || function() {
+            this.graphics.fillStyle(0xFF4500, 0.8);
+            this.graphics.fillCircle(0, 0, this.radius || 20);
+        };
 
-        // Construction du code final
-        const finalCode = `
-            function ${className}(scene, x, y, targetX, targetY) {
-                BaseAttack.call(this, scene, x, y, targetX, targetY);
-                ${cleanCode.replace(/class \w+.*?\{/, '').replace(/\}/, '')}
-            }
-            ${className}.prototype = Object.create(BaseAttack.prototype);
-            ${className}.prototype.constructor = ${className};
-            return ${className};
-        `;
-
-        // Création dynamique de la classe
-        const constructor = new Function('BaseAttack', finalCode)(BaseAttack);
-        return constructor;
-
+        return attackFunction;
     } catch (error) {
-        console.error("Erreur dans createAttackFromMistral:", error);
+        console.error("Erreur dans createAttackFromCode:", error);
         return Fireball; // Fallback
     }
 }
@@ -536,7 +534,11 @@ class GameScene extends Phaser.Scene {
         const examples = {
             "fireball": `
                 function Fireball(scene, x, y, targetX, targetY) {
-                    BaseAttack.call(this, scene, x, y, targetX, targetY);
+                    this.scene = scene;
+                    this.x = x;
+                    this.y = y;
+                    this.targetX = targetX;
+                    this.targetY = targetY;
                     this.damagePercent = 0.3;
                     this.speed = 600;
                     this.radius = 22;
@@ -544,9 +546,8 @@ class GameScene extends Phaser.Scene {
                     this.color1 = 0xFF4500;
                     this.color2 = 0xFFA500;
                     this.flameIntensity = 0;
+                    this.graphics = scene.add.graphics({x: x, y: y}).setDepth(6);
                 }
-                Fireball.prototype = Object.create(BaseAttack.prototype);
-                Fireball.prototype.constructor = Fireball;
                 Fireball.prototype.draw = function() {
                     this.graphics.clear();
                     this.flameIntensity = (this.flameIntensity + 0.05) % 1;
@@ -561,10 +562,16 @@ class GameScene extends Phaser.Scene {
                         this.graphics.fillCircle(flameX, flameY, flameSize);
                     }
                 };
+                Fireball.prototype = Object.create(Object.prototype);
+                Fireball.prototype.constructor = Fireball;
             `,
             "vagueglaceeceleste": `
                 function VagueGlaceeCeleste(scene, x, y, targetX, targetY) {
-                    BaseAttack.call(this, scene, x, y, targetX, targetY);
+                    this.scene = scene;
+                    this.x = x;
+                    this.y = y;
+                    this.targetX = targetX;
+                    this.targetY = targetY;
                     this.damagePercent = 0.2;
                     this.speed = 400;
                     this.radius = 35;
@@ -572,9 +579,8 @@ class GameScene extends Phaser.Scene {
                     this.color1 = 0xE6F7FF;
                     this.color2 = 0xB3E0FF;
                     this.pulsePhase = 0;
+                    this.graphics = scene.add.graphics({x: x, y: y}).setDepth(6);
                 }
-                VagueGlaceeCeleste.prototype = Object.create(BaseAttack.prototype);
-                VagueGlaceeCeleste.prototype.constructor = VagueGlaceeCeleste;
                 VagueGlaceeCeleste.prototype.draw = function() {
                     this.graphics.clear();
                     this.pulsePhase = (this.pulsePhase + 0.02) % 1;
@@ -594,6 +600,8 @@ class GameScene extends Phaser.Scene {
                         this.graphics.fillStar(starX, starY, 3, 2, 3, 3);
                     }
                 };
+                VagueGlaceeCeleste.prototype = Object.create(Object.prototype);
+                VagueGlaceeCeleste.prototype.constructor = VagueGlaceeCeleste;
             `
         };
         return examples[attackName] || examples["fireball"];
@@ -622,17 +630,55 @@ class GameScene extends Phaser.Scene {
                         - radius (10-50)
                         Format strict :
                         function NomAttaque(scene, x, y, targetX, targetY) {
-                            BaseAttack.call(this, scene, x, y, targetX, targetY);
+                            this.scene = scene;
+                            this.x = x;
+                            this.y = y;
+                            this.targetX = targetX;
+                            this.targetY = targetY;
                             this.damagePercent = [valeur];
                             this.speed = [valeur];
                             this.radius = [valeur];
                             this.effect = "[effet]";
-                            // ... autres propriétés
+                            this.graphics = scene.add.graphics({x: x, y: y}).setDepth(6);
                         }
-                        NomAttaque.prototype = Object.create(BaseAttack.prototype);
-                        NomAttaque.prototype.constructor = NomAttaque;
                         NomAttaque.prototype.draw = function() {
                             // Code pour dessiner l'attaque
+                        };
+                        NomAttaque.prototype.animate = function() {
+                            const distance = Phaser.Math.Distance.Between(this.x, this.y, this.targetX, this.targetY);
+                            const duration = distance / this.speed;
+                            this.scene.tweens.add({
+                                targets: this.graphics,
+                                x: this.targetX,
+                                y: this.targetY,
+                                duration: duration * 1000,
+                                onUpdate: () => {
+                                    this.graphics.clear();
+                                    this.draw();
+                                },
+                                onComplete: () => {
+                                    this.applyEffects();
+                                    if (this.graphics) this.graphics.destroy();
+                                }
+                            });
+                        };
+                        NomAttaque.prototype.applyEffects = function() {
+                            const currentTrolls = this.scene.trolls || [];
+                            currentTrolls.forEach(troll => {
+                                if (troll && troll.sprite) {
+                                    const dist = Phaser.Math.Distance.Between(
+                                        this.graphics.x, this.graphics.y,
+                                        troll.sprite.x, troll.sprite.y
+                                    );
+                                    if (dist < this.radius) {
+                                        troll.health -= troll.maxHealth * this.damagePercent;
+                                        if (troll.healthBar) troll.healthBar.setScale(troll.health / troll.maxHealth, 1);
+                                        if (this.effect && this.scene.effects[this.effect]) {
+                                            troll.effects.push(new this.scene.effects[this.effect](troll));
+                                        }
+                                    }
+                                }
+                            });
                         };`
                     }],
                     temperature: 0.5,
@@ -652,10 +698,19 @@ class GameScene extends Phaser.Scene {
     // Lancement d'une attaque
     launchAttack(attackCode, x, y, targetX, targetY) {
         try {
-            const AttackClass = createAttackFromMistral(attackCode);
-            const attack = new AttackClass(this, x, y, targetX, targetY);
+            // Crée la fonction d'attaque à partir du code
+            const AttackFunction = createAttackFromCode(attackCode);
+
+            // Instancie l'attaque
+            const attack = new AttackFunction(this, x, y, targetX, targetY);
+
+            // Ajoute les méthodes par défaut si elles n'existent pas
+            createAttackProperties(attack);
+
+            // Dessine et anime l'attaque
             attack.draw();
             attack.animate();
+
         } catch (error) {
             console.error("Erreur dans launchAttack:", error);
             // Fallback : Fireball basique
