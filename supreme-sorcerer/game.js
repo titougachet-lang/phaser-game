@@ -3,7 +3,6 @@ const playerSpeed = 400;
 const deadZoneRadius = 0.15;
 const cameraLerpFactor = 0.1;
 let playerHealth = 100;
-let playerUlti = 0;
 const mapWidth = 4000;
 const mapHeight = 3000;
 const borderThickness = 20;
@@ -11,7 +10,6 @@ let gameTime = 0;
 let gameActive = true;
 let trollSpawnRate = 3;
 let lastTrollSpawn = 0;
-let trolls = [];
 let trollIdCounter = 0;
 
 // ========== EFFETS ==========
@@ -118,7 +116,7 @@ const effects = {
     }
 };
 
-// ========== CLASSES D'ATTAQUES PRÉDÉFINIES (Fallback) ==========
+// ========== CLASSES D'ATTAQUES PRÉDÉFINIES ==========
 class Fireball {
     constructor(scene, x, y) {
         this.scene = scene;
@@ -141,73 +139,6 @@ class Fireball {
     }
 }
 
-class DarkSword {
-    constructor(scene, x, y) {
-        this.scene = scene;
-        this.x = x;
-        this.y = y;
-        this.damagePercent = 0.3;
-        this.speed = 400;
-        this.length = 60;
-        this.width = 8;
-        this.graphics = scene.add.graphics({x: x, y: y}).setDepth(6);
-        this.effect = "Darkness";
-        this.color1 = 0x1A1A2E;
-        this.color2 = 0x9B5FC0;
-    }
-    draw() {
-        const gradient = this.graphics.createLinearGradient(
-            -this.length/2, -this.width/2,
-            this.length/2, this.width/2
-        );
-        gradient.addColorStop(0, '#1A1A2E');
-        gradient.addColorStop(1, '#4A1A4A');
-        this.graphics.fillStyle(gradient);
-        this.graphics.fillRect(-this.length/2, -this.width/2, this.length, this.width);
-        this.graphics.lineStyle(1, this.color2);
-        this.graphics.lineBetween(-this.length/2 + 10, 0, this.length/2 - 10, 0);
-    }
-}
-
-class HealingPotion {
-    constructor(scene, x, y) {
-        this.scene = scene;
-        this.x = x;
-        this.y = y;
-        this.damagePercent = -0.3;
-        this.speed = 300;
-        this.radius = 15;
-        this.graphics = scene.add.graphics({x: x, y: y}).setDepth(6);
-        this.effect = "Heal";
-        this.color1 = 0x00FF00;
-        this.color2 = 0x00AA00;
-    }
-    draw() {
-        this.graphics.fillStyle(this.color1, 0.7);
-        this.graphics.fillCircle(0, 0, this.radius);
-        this.graphics.lineStyle(1, this.color2);
-        this.graphics.strokeCircle(0, 0, this.radius * 0.8);
-    }
-}
-
-class RepulseWave {
-    constructor(scene, x, y) {
-        this.scene = scene;
-        this.x = x;
-        this.y = y;
-        this.damagePercent = 0;
-        this.speed = 600;
-        this.radius = 0;
-        this.graphics = scene.add.graphics({x: x, y: y}).setDepth(6);
-        this.effect = "Repulse";
-        this.color1 = 0x0000FF;
-    }
-    draw() {
-        this.graphics.lineStyle(3, this.color1, 0.7);
-        this.graphics.strokeCircle(0, 0, this.radius);
-    }
-}
-
 // ========== SCÈNES ==========
 class PreloadScene extends Phaser.Scene {
     constructor() { super({ key: 'PreloadScene' }); }
@@ -220,8 +151,6 @@ class PreloadScene extends Phaser.Scene {
         const progressBar = this.add.rectangle(width/2, height/2, width*0.5, 20, 0x333333).setOrigin(0.5);
         const progressFill = this.add.rectangle(width/2 - width*0.25, height/2 - 10, 0, 20, 0x00ff00).setOrigin(0, 0.5);
         this.load.on('progress', (value) => { progressFill.width = width*0.5*value; });
-        this.load.image('player', 'https://via.placeholder.com/32x32/00ff00/000000?text=P');
-        this.load.image('troll', 'https://via.placeholder.com/32x32/ff0000/000000?text=T');
     }
     create() { this.scene.start('MenuScene'); }
 }
@@ -242,8 +171,6 @@ class MenuScene extends Phaser.Scene {
         playButton.on('pointerdown', () => {
             gameTime = 0;
             playerHealth = 100;
-            playerUlti = 0;
-            trolls = [];
             gameActive = true;
             this.scene.start('GameScene');
         });
@@ -269,8 +196,6 @@ class GameOverScene extends Phaser.Scene {
         replayButton.on('pointerdown', () => {
             gameTime = 0;
             playerHealth = 100;
-            playerUlti = 0;
-            trolls = [];
             gameActive = true;
             this.scene.start('GameScene');
         });
@@ -291,9 +216,6 @@ class GameScene extends Phaser.Scene {
         this.healthBarBg = null;
         this.healthBar = null;
         this.healthText = null;
-        this.ultiCircleBg = null;
-        this.ultiText = null;
-        this.ultiGraphics = null;
         this.timeText = null;
         this.player = null;
         this.trollGroup = null;
@@ -339,28 +261,27 @@ class GameScene extends Phaser.Scene {
             this.walls[2].create(mapWidth/2, mapHeight - borderThickness/2, null).setSize(mapWidth - borderThickness, borderThickness).setVisible(false);
             this.walls[3].create(borderThickness/2, mapHeight/2, null).setSize(borderThickness, mapHeight - borderThickness).setVisible(false);
 
-            // Joueur
-            // Sprite du joueur (rond bleu texturé)
-const playerGraphics = this.add.graphics().setDepth(5);
+            // Création du sprite du joueur (cercle bleu texturé centré)
+const playerGraphics = this.add.graphics();
 playerGraphics.fillStyle(0x0000FF, 1);
-playerGraphics.fillCircle(0, 0, 16);
+playerGraphics.fillCircle(16, 16, 16);  // Centré sur (16,16) pour une texture 32x32
 playerGraphics.lineStyle(2, 0x00AAFF, 1);
-playerGraphics.strokeCircle(0, 0, 16);
+playerGraphics.strokeCircle(16, 16, 16);
 playerGraphics.lineStyle(1, 0x0055AA, 1);
 playerGraphics.beginPath();
-playerGraphics.arc(0, 0, 12, 0, Math.PI * 2);
+playerGraphics.arc(16, 16, 12, 0, Math.PI * 2);
 playerGraphics.stroke();
-playerGraphics.setPosition(this.cameras.main.width / 2, this.cameras.main.height / 2);
+const playerTexture = playerGraphics.generateTexture('playerTexture', 32, 32);
+playerGraphics.destroy();
 
 this.player = this.physics.add.sprite(
     this.cameras.main.width / 2,
     this.cameras.main.height / 2,
-    null
+    'playerTexture'
 ).setDepth(5);
-this.player.setTexture(playerGraphics.generateTexture('player', 32, 32));
-this.player.setCircle(16);
+this.player.setCircle(16, 0, 0);  // Centrer le cercle de collision
+this.player.body.setCollideWorldBounds(false);
 
-            this.player.body.setCollideWorldBounds(false);
 
             // Timer
             this.timeText = this.add.text(this.cameras.main.width - 10, 10, `Temps: ${Math.floor(gameTime)}s`, {
@@ -379,7 +300,6 @@ this.player.setCircle(16);
             this.keyD = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D);
             this.keyZ = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Z);
             this.keyQ = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Q);
-            this.keyE = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E);
 
             this.input.on('pointermove', (pointer) => {
                 this.mouseX = pointer.x;
@@ -416,99 +336,79 @@ this.player.setCircle(16);
     }
 
     createUI() {
-    const { width, height } = this.cameras.main;
-    // Barre de vie du joueur (simplifiée)
-    this.healthBarBg = this.add.rectangle(width*0.05, height*0.05, width*0.2, height*0.03, 0x333333)
-        .setOrigin(0, 0).setScrollFactor(0).setDepth(10);
-    this.healthBar = this.add.rectangle(width*0.05, height*0.05, width*0.2*(playerHealth/100), height*0.03, 0xff0000)
-        .setOrigin(0, 0).setScrollFactor(0).setDepth(10);
-    this.healthText = this.add.text(width*0.02, height*0.04, "PV:", {
-        fontSize: '20px', fill: '#fff'
-    }).setScrollFactor(0).setDepth(10);
-}
-
+        const { width, height } = this.cameras.main;
+        this.healthBarBg = this.add.rectangle(width*0.05, height*0.05, width*0.2, height*0.03, 0x333333)
+            .setOrigin(0, 0).setScrollFactor(0).setDepth(10);
+        this.healthBar = this.add.rectangle(width*0.05, height*0.05, width*0.2*(playerHealth/100), height*0.03, 0xff0000)
+            .setOrigin(0, 0).setScrollFactor(0).setDepth(10);
+        this.healthText = this.add.text(width*0.02, height*0.04, "PV:", {
+            fontSize: '20px', fill: '#fff'
+        }).setScrollFactor(0).setDepth(10);
+    }
 
     resizeUI() {
         if (!this.healthBarBg) return;
         const { width, height } = this.cameras.main;
-        this.healthBarBg.setPosition(width*0.05, height*0.05).setSize(width*0.15, height*0.03);
-        this.healthBar.setPosition(width*0.05, height*0.05).setSize(width*0.15*(playerHealth/100), height*0.03);
+        this.healthBarBg.setPosition(width*0.05, height*0.05).setSize(width*0.2, height*0.03);
+        this.healthBar.setPosition(width*0.05, height*0.05).setSize(width*0.2*(playerHealth/100), height*0.03);
         this.healthText.setPosition(width*0.02, height*0.04);
         this.timeText.setPosition(width - 10, 10);
-        this.ultiCircleBg.setPosition(width/2, height*0.9);
-        this.ultiText.setPosition(width/2, height*0.85);
-        this.updateUltiCircle();
-    }
-
-    updateUltiCircle() {
-        if (!this.ultiGraphics) return;
-        const { width, height } = this.cameras.main;
-        const centerX = width / 2;
-        const centerY = height * 0.9;
-        const radius = width * 0.03;
-        this.ultiGraphics.clear();
-        this.ultiGraphics.fillStyle(0xffff00, 1);
-        this.ultiGraphics.beginPath();
-        this.ultiGraphics.arc(centerX, centerY, radius, -Math.PI / 2, -Math.PI / 2 + (2 * Math.PI * (playerUlti / 100)), false);
-        this.ultiGraphics.lineTo(centerX, centerY);
-        this.ultiGraphics.closePath();
-        this.ultiGraphics.fillPath();
     }
 
     spawnTroll() {
-    const { width, height } = this.cameras.main;
-    const cameraX = this.cameras.main.scrollX;
-    const cameraY = this.cameras.main.scrollY;
-    const spawnDistance = 500;
-    let x, y;
-    const side = Phaser.Math.Between(0, 3);
-    switch (side) {
-        case 0: x = Phaser.Math.Between(cameraX, cameraX + width); y = cameraY - spawnDistance; break;
-        case 1: x = cameraX + width + spawnDistance; y = Phaser.Math.Between(cameraY, cameraY + height); break;
-        case 2: x = Phaser.Math.Between(cameraX, cameraX + width); y = cameraY + height + spawnDistance; break;
-        case 3: x = cameraX - spawnDistance; y = Phaser.Math.Between(cameraY, cameraY + height); break;
+        const { width, height } = this.cameras.main;
+        const cameraX = this.cameras.main.scrollX;
+        const cameraY = this.cameras.main.scrollY;
+        const spawnDistance = 500;
+        let x, y;
+        const side = Phaser.Math.Between(0, 3);
+        switch (side) {
+            case 0: x = Phaser.Math.Between(cameraX, cameraX + width); y = cameraY - spawnDistance; break;
+            case 1: x = cameraX + width + spawnDistance; y = Phaser.Math.Between(cameraY, cameraY + height); break;
+            case 2: x = Phaser.Math.Between(cameraX, cameraX + width); y = cameraY + height + spawnDistance; break;
+            case 3: x = cameraX - spawnDistance; y = Phaser.Math.Between(cameraY, cameraY + height); break;
+        }
+        x = Phaser.Math.Clamp(x, borderThickness, mapWidth - borderThickness);
+        y = Phaser.Math.Clamp(y, borderThickness, mapHeight - borderThickness);
+
+        // Création du sprite du troll (cercle vert texturé centré)
+const trollGraphics = this.add.graphics();
+trollGraphics.fillStyle(0x00FF00, 1);
+trollGraphics.fillCircle(16, 16, 16);  // Centré sur (16,16)
+trollGraphics.lineStyle(2, 0x00AA00, 1);
+trollGraphics.strokeCircle(16, 16, 16);
+trollGraphics.lineStyle(1, 0x005500, 1);
+trollGraphics.beginPath();
+trollGraphics.arc(16, 16, 12, 0, Math.PI * 2);
+trollGraphics.stroke();
+const trollTexture = trollGraphics.generateTexture('trollTexture' + trollIdCounter, 32, 32);
+trollGraphics.destroy();
+
+const troll = this.physics.add.sprite(x, y, 'trollTexture' + trollIdCounter)
+    .setDepth(4);
+troll.setCircle(16, 0, 0);  // Centrer le cercle de collision
+this.trollGroup.add(troll);
+
+
+        // Barre de vie
+        const healthBarBg = this.add.rectangle(x, y - 20, 30, 4, 0x333333).setOrigin(0.5).setDepth(5);
+        const healthBar = this.add.rectangle(x - 15, y - 20, 30, 4, 0xff0000).setOrigin(0).setDepth(5);
+
+        const gameProgress = Math.min(1, gameTime / 60);
+        const trollData = {
+            id: trollIdCounter++,
+            sprite: troll,
+            health: Phaser.Math.FloatBetween(20 + gameProgress*10, 30 + gameProgress*10),
+            maxHealth: Phaser.Math.FloatBetween(20 + gameProgress*10, 30 + gameProgress*10),
+            speed: Phaser.Math.FloatBetween(100 + gameProgress*50, 150 + gameProgress*50),
+            damagePerSecond: Phaser.Math.FloatBetween(1 + gameProgress*2, 3 + gameProgress*2),
+            lastDamageTime: 0,
+            healthBarBg: healthBarBg,
+            healthBar: healthBar
+        };
+        this.trolls.push(trollData);
+        return trollData;
     }
-    x = Phaser.Math.Clamp(x, borderThickness, mapWidth - borderThickness);
-    y = Phaser.Math.Clamp(y, borderThickness, mapHeight - borderThickness);
-
-    // Sprite du troll (rond vert texturé)
-    const trollGraphics = this.add.graphics().setDepth(4);
-    trollGraphics.fillStyle(0x00FF00, 1);
-    trollGraphics.fillCircle(0, 0, 16);
-    trollGraphics.lineStyle(2, 0x00AA00, 1);
-    trollGraphics.strokeCircle(0, 0, 16);
-    trollGraphics.lineStyle(1, 0x005500, 1);
-    trollGraphics.beginPath();
-    trollGraphics.arc(0, 0, 12, 0, Math.PI * 2);
-    trollGraphics.stroke();
-    trollGraphics.setPosition(x, y);
-
-    const troll = this.physics.add.sprite(x, y, null).setDepth(4);
-    troll.setCircle(16);
-    troll.setTexture(trollGraphics.generateTexture('troll' + trollIdCounter, 32, 32));
-    this.trollGroup.add(troll);
-
-    // Barre de vie
-    const healthBarBg = this.add.rectangle(x, y - 20, 30, 4, 0x333333).setOrigin(0.5).setDepth(5);
-    const healthBar = this.add.rectangle(x - 15, y - 20, 30, 4, 0xff0000).setOrigin(0).setDepth(5);
-
-    const gameProgress = Math.min(1, gameTime / 60);
-    const trollData = {
-        id: trollIdCounter++,
-        sprite: troll,
-        health: Phaser.Math.FloatBetween(20 + gameProgress*10, 30 + gameProgress*10),
-        maxHealth: Phaser.Math.FloatBetween(20 + gameProgress*10, 30 + gameProgress*10),
-        speed: Phaser.Math.FloatBetween(100 + gameProgress*50, 150 + gameProgress*50),
-        damagePerSecond: Phaser.Math.FloatBetween(1 + gameProgress*2, 3 + gameProgress*2),
-        lastDamageTime: 0,
-        healthBarBg: healthBarBg,
-        healthBar: healthBar
-    };
-    this.trolls.push(trollData);
-
-    return trollData;
-}
-
 
     setupVoiceControl() {
         this.input.keyboard.on('keydown-SPACE', async () => {
@@ -550,10 +450,8 @@ this.player.setCircle(16);
                     resolve(null);
                     return;
                 }
-
                 recognition.lang = 'fr-FR';
                 recognition.interimResults = false;
-
                 recognition.onerror = (event) => {
                     console.error("Erreur de reconnaissance :", event.error);
                     if (event.error === 'no-speech') {
@@ -563,11 +461,9 @@ this.player.setCircle(16);
                     }
                     resolve(null);
                 };
-
                 recognition.onresult = (event) => resolve(event.results[0][0].transcript);
                 recognition.onstart = () => console.log("Reconnaissance démarrée. Parle !");
                 recognition.start();
-
             } catch (error) {
                 console.error("Erreur dans recordAndTranscribe:", error);
                 resolve(null);
@@ -575,102 +471,80 @@ this.player.setCircle(16);
         });
     }
 
-    // Appel à l'API Mistral via Ngrok
-async generateAttackWithMistral(userRequest) {
-    try {
-        const response = await fetch('http://localhost:5000/api/attack', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ user_request: userRequest })
-        });
-
-        if (!response.ok) {
-            throw new Error(`Erreur serveur: ${response.status}`);
+    async generateAttackWithMistral(userRequest) {
+        try {
+            const response = await fetch('http://localhost:5000/api/attack', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_request: userRequest })
+            });
+            if (!response.ok) throw new Error(`Erreur serveur: ${response.status}`);
+            return await response.text();
+        } catch (error) {
+            console.error("Erreur avec l'API locale:", error);
+            throw error;
         }
-
-        // On récupère le texte brut (pas du JSON)
-        const attackCode = await response.text();
-        return attackCode;
-
-    } catch (error) {
-        console.error("Erreur avec l'API locale:", error);
-        throw error;
     }
-}
 
+    executeDynamicAttack(attackCode, x, y, targetX, targetY) {
+        try {
+            const cleanCode = attackCode.replace(/`/g, '').trim();
+            const classNameMatch = cleanCode.match(/class (\w+)/);
+            if (!classNameMatch) throw new Error("Nom de classe introuvable.");
+            const className = classNameMatch[1];
+            const AttackClass = window.Function(`${cleanCode}\nreturn ${className};`)();
+            const attack = new AttackClass(this, x, y);
 
-   executeDynamicAttack(attackCode, x, y, targetX, targetY) {
-    try {
-        const cleanCode = attackCode.replace(/`/g, '').trim();
-        const classNameMatch = cleanCode.match(/class (\w+)/);
-        if (!classNameMatch) throw new Error("Nom de classe introuvable.");
-        const className = classNameMatch[1];
-        const AttackClass = window.Function(`${cleanCode}\nreturn ${className};`)();
-        const attack = new AttackClass(this, x, y);
-
-        if (typeof attack.draw !== 'function') {
-            attack.draw = function() {
-                this.graphics.fillStyle(0xFF4500, 0.8);
-                this.graphics.fillCircle(0, 0, this.radius || 20);
-            };
-        }
-        attack.draw();
-
-        const distance = Phaser.Math.Distance.Between(x, y, targetX, targetY);
-        const duration = distance / (attack.speed || 500);
-        const scene = this;
-        const trolls = this.trolls; // Utilise this.trolls directement
-
-        if (!trolls) {
-            console.error("ERREUR : this.trolls est undefined !");
-            return;
-        }
-
-        this.tweens.add({
-            targets: attack.graphics,
-            x: targetX,
-            y: targetY,
-            duration: duration * 1000,
-            onUpdate: () => {
-                attack.graphics.clear();
-                attack.draw();
-                trolls.forEach(troll => {
-                    if (!troll || !troll.sprite || troll.health <= 0) return;
-                    const dist = Phaser.Math.Distance.Between(
-                        attack.graphics.x, attack.graphics.y,
-                        troll.sprite.x, troll.sprite.y
-                    );
-                    if (dist < (attack.radius || 30)) {
-                        const damage = troll.maxHealth * (attack.damagePercent || 0.25);
-                        troll.health = Math.max(0, troll.health - damage);
-                        if (troll.healthBar) {
-                            troll.healthBar.setScale(troll.health / troll.maxHealth, 1);
-                        }
-                        if (troll.health <= 0) {
-                            troll.sprite.destroy();
-                            if (troll.healthBarBg) troll.healthBarBg.destroy();
-                            if (troll.healthBar) troll.healthBar.destroy();
-                            const index = trolls.indexOf(troll);
-                            if (index > -1) trolls.splice(index, 1);
-                        }
-                    }
-                });
-            },
-            onComplete: () => {
-                if (attack.graphics) attack.graphics.destroy();
+            if (typeof attack.draw !== 'function') {
+                attack.draw = function() {
+                    this.graphics.fillStyle(0xFF4500, 0.8);
+                    this.graphics.fillCircle(0, 0, this.radius || 20);
+                };
             }
-        });
-    } catch (error) {
-        console.error("Erreur :", error);
+            attack.draw();
+
+            const distance = Phaser.Math.Distance.Between(x, y, targetX, targetY);
+            const duration = distance / (attack.speed || 500);
+            const trolls = this.trolls;
+
+            this.tweens.add({
+                targets: attack.graphics,
+                x: targetX,
+                y: targetY,
+                duration: duration * 1000,
+                onUpdate: () => {
+                    attack.graphics.clear();
+                    attack.draw();
+                    trolls.forEach(troll => {
+                        if (!troll || !troll.sprite || troll.health <= 0) return;
+                        const dist = Phaser.Math.Distance.Between(
+                            attack.graphics.x, attack.graphics.y,
+                            troll.sprite.x, troll.sprite.y
+                        );
+                        if (dist < (attack.radius || 30)) {
+                            const damage = troll.maxHealth * (attack.damagePercent || 0.25);
+                            troll.health = Math.max(0, troll.health - damage);
+                            if (troll.healthBar) {
+                                troll.healthBar.setScale(troll.health / troll.maxHealth, 1);
+                            }
+                            if (troll.health <= 0) {
+                                troll.sprite.destroy();
+                                troll.healthBarBg.destroy();
+                                troll.healthBar.destroy();
+                                const index = trolls.indexOf(troll);
+                                if (index > -1) trolls.splice(index, 1);
+                            }
+                        }
+                    });
+                },
+                onComplete: () => {
+                    if (attack.graphics) attack.graphics.destroy();
+                }
+            });
+        } catch (error) {
+            console.error("Erreur dans executeDynamicAttack:", error);
+        }
     }
-}
-
-
-
-
-
 
     update(time, delta) {
         if (!gameActive) return;
@@ -684,16 +558,20 @@ async generateAttackWithMistral(userRequest) {
             trollSpawnRate = Math.max(0.3, 3 - gameTime * 0.02);
         }
 
-        trolls.forEach(troll => {
+        // Mise à jour des trolls et de leurs barres de vie
+        this.trolls.forEach(troll => {
             const angle = Phaser.Math.Angle.Between(
                 troll.sprite.x, troll.sprite.y,
                 this.player.x, this.player.y
             );
             this.physics.moveTo(troll.sprite, this.player.x, this.player.y, troll.speed);
+
+            // Mise à jour des barres de vie
             troll.healthBarBg.setPosition(troll.sprite.x, troll.sprite.y - 20);
             troll.healthBar.setPosition(troll.sprite.x - 15, troll.sprite.y - 20);
             troll.healthBar.setScale(troll.health / troll.maxHealth, 1);
 
+            // Collision avec le joueur
             if (Phaser.Math.Distance.Between(troll.sprite.x, troll.sprite.y, this.player.x, this.player.y) < 34) {
                 if (time > troll.lastDamageTime + 1000) {
                     playerHealth = Math.max(0, playerHealth - troll.damagePerSecond);
@@ -707,27 +585,33 @@ async generateAttackWithMistral(userRequest) {
                 }
             }
 
-            troll.effects.forEach(effect => {
-                if (effect.update) effect.update(delta);
-            });
+            // Mise à jour des effets
+            if (troll.effects) {
+                troll.effects.forEach(effect => {
+                    if (effect.update) effect.update(delta);
+                });
+            }
         });
 
+        // Déplacement du joueur
         this.player.setVelocity(0);
         if (this.keyW.isDown || this.keyZ.isDown) this.player.setVelocityY(-playerSpeed);
         else if (this.keyS.isDown) this.player.setVelocityY(playerSpeed);
         if (this.keyA.isDown || this.keyQ.isDown) this.player.setVelocityX(-playerSpeed);
         else if (this.keyD.isDown) this.player.setVelocityX(playerSpeed);
 
+        // Rotation du joueur vers la souris
         if (this.mouseX !== undefined) {
             const worldMouseX = this.cameras.main.scrollX + this.mouseX;
             const worldMouseY = this.cameras.main.scrollY + this.mouseY;
             this.player.rotation = Phaser.Math.Angle.Between(this.player.x, this.player.y, worldMouseX, worldMouseY);
         }
 
+        // Mise à jour de la barre de vie du joueur
         const { width, height } = this.cameras.main;
-        this.healthBar.setSize(width * 0.15 * (playerHealth / 100), height * 0.03);
-        this.updateUltiCircle();
+        this.healthBar.setSize(width * 0.2 * (playerHealth / 100), height * 0.03);
 
+        // Gestion de la caméra (suit le joueur)
         const cameraCenterX = this.cameras.main.scrollX + this.cameras.main.width / 2;
         const cameraCenterY = this.cameras.main.scrollY + this.cameras.main.height / 2;
         const dx = this.player.x - cameraCenterX;
@@ -748,11 +632,6 @@ async generateAttackWithMistral(userRequest) {
             this.cameras.main.scrollY = Phaser.Math.Linear(
                 this.cameras.main.scrollY, targetY - this.cameras.main.height / 2, cameraLerpFactor
             );
-        }
-
-        if (this.keyE.isDown) {
-            playerUlti = Math.min(100, playerUlti + 0.5);
-            this.updateUltiCircle();
         }
     }
 }
@@ -780,22 +659,6 @@ const config = {
         }
     },
     scene: [PreloadScene, MenuScene, GameScene, GameOverScene]
-};
-
-// Modification pour +5% d'ulti par troll tué
-const originalSpawnTroll = GameScene.prototype.spawnTroll;
-GameScene.prototype.spawnTroll = function() {
-    const troll = originalSpawnTroll.call(this);
-    const originalHealth = troll.health;
-    const checkHealth = () => {
-        if (troll.health <= 0 && troll.health !== originalHealth) {
-            playerUlti = Math.min(100, playerUlti + 5);
-            this.updateUltiCircle();
-            troll.sprite.off('destroy', checkHealth);
-        }
-    };
-    troll.sprite.on('destroy', checkHealth);
-    return troll;
 };
 
 // Initialisation du jeu
