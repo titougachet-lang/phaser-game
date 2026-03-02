@@ -576,72 +576,64 @@ class GameScene extends Phaser.Scene {
 
         const className = classNameMatch[1];
 
-        // 3. Crée la classe dynamiquement
+        // 3. Ajoute une méthode update() si elle n'existe pas
+        const codeWithUpdate = cleanCode.includes('update(') ?
+            cleanCode :
+            cleanCode.replace(
+                /draw\(\) \{[^\}]*\}/,
+                `draw() {$&}
+                 update(targetX, targetY) {
+                     const distance = Phaser.Math.Distance.Between(this.x, this.y, targetX, targetY);
+                     const duration = distance / (this.speed || 500);
+                     this.scene.tweens.add({
+                         targets: this.graphics,
+                         x: targetX,
+                         y: targetY,
+                         duration: duration * 1000,
+                         onUpdate: () => {
+                             this.graphics.clear();
+                             this.draw();
+                         },
+                         onComplete: () => {
+                             this.explode(targetX, targetY);
+                         }
+                     });
+                 }
+                 explode(x, y) {
+                     // Applique des dégâts aux trolls autour
+                     this.scene.trolls.forEach(troll => {
+                         if (troll && troll.sprite) {
+                             const dist = Phaser.Math.Distance.Between(x, y, troll.sprite.x, troll.sprite.y);
+                             if (dist < (this.radius || 30)) {
+                                 troll.health -= troll.maxHealth * (this.damagePercent || 0.2);
+                                 if (troll.healthBar) troll.healthBar.setScale(troll.health / troll.maxHealth, 1);
+                                 if (this.effect && this.scene.effects[this.effect]) {
+                                     troll.effects.push(new this.scene.effects[this.effect](troll));
+                                 }
+                             }
+                         }
+                     });
+                     if (this.graphics) this.graphics.destroy();
+                 }`
+            );
+
+        // 4. Crée la classe dynamiquement
         const AttackClass = window.Function(`
-            ${cleanCode}
+            ${codeWithUpdate}
             return ${className};
         `)();
 
-        // 4. Instancie l'attaque avec les coordonnées cibles
-        const attack = new AttackClass(this, x, y, targetX, targetY);
-
-        // 5. Vérifie que les méthodes existent
-        if (typeof attack.draw !== 'function') {
-            attack.draw = function() {
-                this.graphics.fillStyle(0xFF4500, 0.8);
-                this.graphics.fillCircle(0, 0, this.radius || 20);
-            };
-        }
+        // 5. Instancie l'attaque
+        const attack = new AttackClass(this, x, y);
 
         // 6. Dessine l'attaque
         attack.draw();
 
         // 7. Anime le mouvement et gère les collisions
-        const distance = Phaser.Math.Distance.Between(x, y, targetX, targetY);
-        const duration = distance / (attack.speed || 500);
-
-        // Stocke une référence aux trolls ACTUELS (évite le problème de scope)
-        const currentTrolls = this.trolls || [];
-
-        this.tweens.add({
-            targets: attack.graphics,
-            x: targetX,
-            y: targetY,
-            duration: duration * 1000,
-            onUpdate: () => {
-                attack.graphics.clear();
-                attack.draw();
-
-                // Vérifie les collisions avec les trolls ACTUELS
-                currentTrolls.forEach(troll => {
-                    if (troll && troll.sprite) {
-                        const dist = Phaser.Math.Distance.Between(
-                            attack.graphics.x, attack.graphics.y,
-                            troll.sprite.x, troll.sprite.y
-                        );
-                        if (dist < (attack.radius || 30)) {
-                            troll.health -= troll.maxHealth * (attack.damagePercent || 0.25);
-                            if (troll.healthBar) {
-                                troll.healthBar.setScale(troll.health / troll.maxHealth, 1);
-                            }
-                            // Effets
-                            if (attack.effect && this.effects[attack.effect]) {
-                                troll.effects.push(new this.effects[attack.effect](troll));
-                            }
-                        }
-                    }
-                });
-            },
-            onComplete: () => {
-                if (attack.graphics) {
-                    attack.graphics.destroy();
-                }
-            }
-        });
+        attack.update(targetX, targetY);
 
     } catch (error) {
         console.error("Erreur dans executeDynamicAttack:", error);
-        // Message d'erreur visible dans le jeu
         const errorText = this.add.text(
             this.cameras.main.width / 2,
             this.cameras.main.height / 2,
@@ -651,6 +643,7 @@ class GameScene extends Phaser.Scene {
         this.time.delayedCall(2000, () => errorText.destroy());
     }
 }
+
 
 
     update(time, delta) {
@@ -781,4 +774,5 @@ GameScene.prototype.spawnTroll = function() {
 
 // Initialisation du jeu
 const game = new Phaser.Game(config);
+
 
