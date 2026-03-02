@@ -357,7 +357,7 @@ class GameScene extends Phaser.Scene {
                     this.microIndicator.setVisible(false);
                     if (transcription) {
                         console.log("Transcription :", transcription);
-                        const attackCode = this.generateAttackWithMistral(transcription);
+                        const attackCode = await this.generateAttackWithMistral(transcription);
                         if (attackCode) {
                             const angle = Phaser.Math.Angle.Between(
                                 this.player.x, this.player.y,
@@ -412,11 +412,12 @@ class GameScene extends Phaser.Scene {
         });
     }
 
-    // **Génération d'attaques avec exemples prédéfinis (sans API)**
-    generateAttackWithMistral(userRequest) {
+    // **NOUVEAU : Génération d'attaques avec exemples prédéfinis (sans API)**
+    async generateAttackWithMistral(userRequest) {
         console.log("Demande utilisateur :", userRequest);
         const attackName = userRequest.replace(/\s+/g, '').toLowerCase();
 
+        // **Exemples prédéfinis (testés et fonctionnels)**
         const examples = {
             "fireball": `
                 class Fireball {
@@ -493,22 +494,36 @@ class GameScene extends Phaser.Scene {
                 }
             `
         };
+
+        // Retourne l'exemple correspondant ou un fallback
         return examples[attackName] || examples["fireball"];
     }
 
+    // **NOUVEAU : Exécution dynamique corrigée**
     executeDynamicAttack(attackCode, x, y, targetX, targetY) {
         try {
-            const cleanCode = attackCode.replace(/`/g, '').trim();
+            // 1. Nettoie le code
+            const cleanCode = attackCode
+                .replace(/`/g, '')
+                .replace(/^\s+|\s+$/g, '')
+                .replace(/\n+/g, '\n');
+
+            // 2. Extrait le nom de la classe
             const classNameMatch = cleanCode.match(/class (\w+)/);
             if (!classNameMatch) throw new Error("Nom de classe introuvable.");
 
             const className = classNameMatch[1];
+
+            // 3. Crée la classe dynamiquement
             const AttackClass = window.Function(`
                 ${cleanCode}
                 return ${className};
             `)();
+
+            // 4. Instancie l'attaque
             const attack = new AttackClass(this, x, y);
 
+            // 5. Ajoute draw() si absent
             if (typeof attack.draw !== 'function') {
                 attack.draw = function() {
                     this.graphics.fillStyle(0xFF4500, 0.8);
@@ -516,7 +531,10 @@ class GameScene extends Phaser.Scene {
                 };
             }
 
+            // 6. Dessine l'attaque
             attack.draw();
+
+            // 7. Anime le mouvement
             const distance = Phaser.Math.Distance.Between(x, y, targetX, targetY);
             const duration = distance / (attack.speed || 500);
 
@@ -528,6 +546,8 @@ class GameScene extends Phaser.Scene {
                 onUpdate: () => {
                     attack.graphics.clear();
                     attack.draw();
+
+                    // Collisions avec les trolls
                     this.trolls.forEach(troll => {
                         const dist = Phaser.Math.Distance.Between(
                             attack.graphics.x, attack.graphics.y,
@@ -536,12 +556,16 @@ class GameScene extends Phaser.Scene {
                         if (dist < (attack.radius || 30)) {
                             troll.health -= troll.maxHealth * (attack.damagePercent || 0.25);
                             troll.healthBar.setScale(troll.health / troll.maxHealth, 1);
+
+                            // Knockback
                             const knockbackAngle = Phaser.Math.Angle.Between(
                                 troll.sprite.x, troll.sprite.y,
                                 attack.graphics.x, attack.graphics.y
                             );
                             troll.sprite.x += Math.cos(knockbackAngle) * 20;
                             troll.sprite.y += Math.sin(knockbackAngle) * 20;
+
+                            // Effets
                             if (attack.effect && this.effects[attack.effect]) {
                                 troll.effects.push(new this.effects[attack.effect](troll));
                             }
@@ -568,14 +592,86 @@ class GameScene extends Phaser.Scene {
 
     update(time, delta) {
         if (!gameActive) return;
+
         gameTime += delta / 1000;
         this.timeText.setText(`Temps: ${Math.floor(gameTime)}s`);
+
         if (time > lastTrollSpawn + trollSpawnRate * 1000) {
             this.spawnTroll();
             lastTrollSpawn = time;
             trollSpawnRate = Math.max(0.3, 3 - gameTime * 0.02);
         }
-        // ... (le reste de la méthode update)
+
+        trolls.forEach(troll => {
+            const angle = Phaser.Math.Angle.Between(
+                troll.sprite.x, troll.sprite.y,
+                this.player.x, this.player.y
+            );
+            this.physics.moveTo(troll.sprite, this.player.x, this.player.y, troll.speed);
+            troll.healthBarBg.setPosition(troll.sprite.x, troll.sprite.y - 20);
+            troll.healthBar.setPosition(troll.sprite.x - 15, troll.sprite.y - 20);
+            troll.healthBar.setScale(troll.health / troll.maxHealth, 1);
+
+            if (Phaser.Math.Distance.Between(troll.sprite.x, troll.sprite.y, this.player.x, this.player.y) < 34) {
+                if (time > troll.lastDamageTime + 1000) {
+                    playerHealth = Math.max(0, playerHealth - troll.damagePerSecond);
+                    this.healthBar.setSize(this.healthBarBg.width * (playerHealth / 100), this.healthBarBg.height);
+                    troll.lastDamageTime = time;
+                    if (playerHealth <= 0) {
+                        gameActive = false;
+                        this.scene.pause();
+                        this.scene.launch('GameOverScene');
+                    }
+                }
+            }
+
+            troll.effects.forEach(effect => {
+                if (effect.update) effect.update(delta);
+            });
+        });
+
+        this.player.setVelocity(0);
+        if (this.keyW.isDown || this.keyZ.isDown) this.player.setVelocityY(-playerSpeed);
+        else if (this.keyS.isDown) this.player.setVelocityY(playerSpeed);
+        if (this.keyA.isDown || this.keyQ.isDown) this.player.setVelocityX(-playerSpeed);
+        else if (this.keyD.isDown) this.player.setVelocityX(playerSpeed);
+
+        if (this.mouseX !== undefined) {
+            const worldMouseX = this.cameras.main.scrollX + this.mouseX;
+            const worldMouseY = this.cameras.main.scrollY + this.mouseY;
+            this.player.rotation = Phaser.Math.Angle.Between(this.player.x, this.player.y, worldMouseX, worldMouseY);
+        }
+
+        const { width, height } = this.cameras.main;
+        this.healthBar.setSize(width * 0.15 * (playerHealth / 100), height * 0.03);
+        this.updateUltiCircle();
+
+        const cameraCenterX = this.cameras.main.scrollX + this.cameras.main.width / 2;
+        const cameraCenterY = this.cameras.main.scrollY + this.cameras.main.height / 2;
+        const dx = this.player.x - cameraCenterX;
+        const dy = this.player.y - cameraCenterY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        const currentDeadZoneRadius = Math.min(
+            this.cameras.main.width * deadZoneRadius,
+            this.cameras.main.height * deadZoneRadius
+        );
+
+        if (distance > currentDeadZoneRadius) {
+            const angle = Math.atan2(dy, dx);
+            const targetX = this.player.x - Math.cos(angle) * currentDeadZoneRadius;
+            const targetY = this.player.y - Math.sin(angle) * currentDeadZoneRadius;
+            this.cameras.main.scrollX = Phaser.Math.Linear(
+                this.cameras.main.scrollX, targetX - this.cameras.main.width / 2, cameraLerpFactor
+            );
+            this.cameras.main.scrollY = Phaser.Math.Linear(
+                this.cameras.main.scrollY, targetY - this.cameras.main.height / 2, cameraLerpFactor
+            );
+        }
+
+        if (this.keyE.isDown) {
+            playerUlti = Math.min(100, playerUlti + 0.5);
+            this.updateUltiCircle();
+        }
     }
 }
 
