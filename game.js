@@ -581,7 +581,7 @@ class GameScene extends Phaser.Scene {
             cleanCode :
             cleanCode.replace(
                 /draw\(\) \{[^\}]*\}/,
-                `draw() {$&}
+                draw() {$&}
                  update(targetX, targetY) {
                      const distance = Phaser.Math.Distance.Between(this.x, this.y, targetX, targetY);
                      const duration = distance / (this.speed || 500);
@@ -774,5 +774,6 @@ GameScene.prototype.spawnTroll = function() {
 
 // Initialisation du jeu
 const game = new Phaser.Game(config);
+
 
 
