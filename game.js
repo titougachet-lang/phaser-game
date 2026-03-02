@@ -1,4 +1,4 @@
-// Variables globales (inchangées)
+// ========== VARIABLES GLOBALES ==========
 const playerSpeed = 400;
 const deadZoneRadius = 0.15;
 const cameraLerpFactor = 0.1;
@@ -14,7 +14,7 @@ let lastTrollSpawn = 0;
 let trolls = [];
 let trollIdCounter = 0;
 
-// Effets (simplifiés)
+// ========== EFFETS ==========
 const effects = {
     BurnEffect: class {
         constructor(troll) {
@@ -68,7 +68,7 @@ const effects = {
     }
 };
 
-// Scènes (inchangées sauf GameScene)
+// ========== SCÈNES ==========
 class PreloadScene extends Phaser.Scene {
     constructor() { super({ key: 'PreloadScene' }); }
     preload() {
@@ -412,12 +412,10 @@ class GameScene extends Phaser.Scene {
         });
     }
 
-    // **NOUVEAU : Génération d'attaques avec exemples prédéfinis (sans API)**
+    // **FONCTION POUR APPLER L'API MISTRAL (DIRECTE, SANS PROXY)**
     async generateAttackWithMistral(userRequest) {
-        console.log("Demande utilisateur :", userRequest);
+        // 1. Code prédéfini pour les tests (à remplacer par l'API plus tard)
         const attackName = userRequest.replace(/\s+/g, '').toLowerCase();
-
-        // **Exemples prédéfinis (testés et fonctionnels)**
         const examples = {
             "fireball": `
                 class Fireball {
@@ -425,20 +423,28 @@ class GameScene extends Phaser.Scene {
                         this.scene = scene;
                         this.x = x;
                         this.y = y;
-                        this.damagePercent = 0.25;
-                        this.speed = 500;
-                        this.radius = 20;
-                        this.graphics = scene.add.graphics({x: x, y: y}).setDepth(6);
+                        this.damagePercent = 0.3;
+                        this.speed = 600;
+                        this.radius = 22;
+                        this.graphics = scene.add.graphics({x, y}).setDepth(6);
                         this.effect = "Burn";
                         this.color1 = 0xFF4500;
                         this.color2 = 0xFFA500;
+                        this.flameIntensity = 0;
                     }
                     draw() {
-                        this.graphics.fillStyle(this.color1, 0.8);
+                        this.graphics.clear();
+                        this.flameIntensity = (this.flameIntensity + 0.05) % 1;
+                        this.graphics.fillStyle(this.color1, 0.9);
                         this.graphics.fillCircle(0, 0, this.radius);
-                        this.graphics.fillStyle(this.color2, 0.5);
-                        this.graphics.fillCircle(5, 5, this.radius * 0.3);
-                        this.graphics.fillCircle(-5, -5, this.radius * 0.3);
+                        for (let i = 0; i < 5; i++) {
+                            const angle = (i / 5) * Math.PI * 2 + this.flameIntensity;
+                            const flameSize = this.radius * (0.3 + Math.sin(this.flameIntensity * 3) * 0.1);
+                            const flameX = Math.cos(angle) * (this.radius * 0.7);
+                            const flameY = Math.sin(angle) * (this.radius * 0.7);
+                            this.graphics.fillStyle(this.color2, 0.7 - Math.sin(this.flameIntensity) * 0.2);
+                            this.graphics.fillCircle(flameX, flameY, flameSize);
+                        }
                     }
                 }
             `,
@@ -452,7 +458,7 @@ class GameScene extends Phaser.Scene {
                         this.speed = 400;
                         this.length = 60;
                         this.width = 8;
-                        this.graphics = scene.add.graphics({x: x, y: y}).setDepth(6);
+                        this.graphics = scene.add.graphics({x, y}).setDepth(6);
                         this.effect = "None";
                         this.color1 = 0x1A1A2E;
                         this.color2 = 0x9B5FC0;
@@ -480,7 +486,7 @@ class GameScene extends Phaser.Scene {
                         this.damagePercent = -0.3;
                         this.speed = 300;
                         this.radius = 15;
-                        this.graphics = scene.add.graphics({x: x, y: y}).setDepth(6);
+                        this.graphics = scene.add.graphics({x, y}).setDepth(6);
                         this.effect = "Heal";
                         this.color1 = 0x00FF00;
                         this.color2 = 0x00AA00;
@@ -495,11 +501,67 @@ class GameScene extends Phaser.Scene {
             `
         };
 
-        // Retourne l'exemple correspondant ou un fallback
+        // 2. Retourne le code prédéfini (pour l'instant)
+        // TODO: Remplacer par un vrai appel à l'API Mistral plus tard
         return examples[attackName] || examples["fireball"];
+
+        // 3. Version pour appeler l'API Mistral (à décommenter plus tard)
+        /*
+        try {
+            const response = await fetch('https://api.mistral.ai/v1/chat', {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer JGyB6en2pxrtuXl5zkloF2NeR6Yf7vFO',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    model: 'mistral-medium',
+                    agent_id: "ag_019cab8297cd74d2bf340000452a49a5",
+                    messages: [{
+                        role: 'user',
+                        content: `Génère UNIQUEMENT le code JavaScript pour une attaque nommée "${userRequest.replace(/\s+/g, '')}"
+                        avec :
+                        - 1 forme principale (cercle/rectangle/ellipse)
+                        - 1-2 détails visuels (lignes, petits cercles)
+                        - 1 effet parmi : Burn, Heal, Repulse, Darkness, Attract, None
+                        - damagePercent (0.1-0.5 pour dégâts, négatif pour soins)
+                        - speed (300-1000)
+                        - radius (10-50)
+                        Format strict :
+                        class NomAttaque {
+                            constructor(scene, x, y) {
+                                this.scene = scene;
+                                this.x = x;
+                                this.y = y;
+                                this.damagePercent = [valeur];
+                                this.speed = [valeur];
+                                this.radius = [valeur];
+                                this.graphics = scene.add.graphics({x, y}).setDepth(6);
+                                this.effect = "[effet]";
+                            }
+                            draw() {
+                                // 1-2 lignes pour dessiner l'attaque
+                            }
+                        }`
+                    }],
+                    temperature: 0.5,
+                    max_tokens: 200
+                })
+            });
+
+            if (!response.ok) throw new Error(`Erreur API: ${response.status}`);
+
+            const data = await response.json();
+            return data.choices[0].message.content;
+
+        } catch (error) {
+            console.error("Erreur API Mistral:", error);
+            return examples[attackName] || examples["fireball"];
+        }
+        */
     }
 
-    // **NOUVEAU : Exécution dynamique corrigée**
+    // **FONCTION POUR EXÉCUTER LES ATTAQUES DYNAMIQUES**
     executeDynamicAttack(attackCode, x, y, targetX, targetY) {
         try {
             // 1. Nettoie le code
@@ -523,7 +585,7 @@ class GameScene extends Phaser.Scene {
             // 4. Instancie l'attaque
             const attack = new AttackClass(this, x, y);
 
-            // 5. Ajoute draw() si absent
+            // 5. Ajoute les méthodes manquantes si nécessaire
             if (typeof attack.draw !== 'function') {
                 attack.draw = function() {
                     this.graphics.fillStyle(0xFF4500, 0.8);
@@ -548,33 +610,31 @@ class GameScene extends Phaser.Scene {
                     attack.draw();
 
                     // Collisions avec les trolls
-                    this.trolls.forEach(troll => {
-                        const dist = Phaser.Math.Distance.Between(
-                            attack.graphics.x, attack.graphics.y,
-                            troll.sprite.x, troll.sprite.y
-                        );
-                        if (dist < (attack.radius || 30)) {
-                            troll.health -= troll.maxHealth * (attack.damagePercent || 0.25);
-                            troll.healthBar.setScale(troll.health / troll.maxHealth, 1);
-
-                            // Knockback
-                            const knockbackAngle = Phaser.Math.Angle.Between(
-                                troll.sprite.x, troll.sprite.y,
-                                attack.graphics.x, attack.graphics.y
-                            );
-                            troll.sprite.x += Math.cos(knockbackAngle) * 20;
-                            troll.sprite.y += Math.sin(knockbackAngle) * 20;
-
-                            // Effets
-                            if (attack.effect && this.effects[attack.effect]) {
-                                troll.effects.push(new this.effects[attack.effect](troll));
+                    if (this.trolls && Array.isArray(this.trolls)) {
+                        this.trolls.forEach(troll => {
+                            if (troll && troll.sprite) {
+                                const dist = Phaser.Math.Distance.Between(
+                                    attack.graphics.x, attack.graphics.y,
+                                    troll.sprite.x, troll.sprite.y
+                                );
+                                if (dist < (attack.radius || 30)) {
+                                    troll.health -= troll.maxHealth * (attack.damagePercent || 0.25);
+                                    if (troll.healthBar) {
+                                        troll.healthBar.setScale(troll.health / troll.maxHealth, 1);
+                                    }
+                                    // Effets
+                                    if (attack.effect && this.effects[attack.effect]) {
+                                        troll.effects.push(new this.effects[attack.effect](troll));
+                                    }
+                                }
                             }
-                        }
-                    });
+                        });
+                    }
                 },
                 onComplete: () => {
-                    attack.graphics.destroy();
-                    attack.active = false;
+                    if (attack.graphics) {
+                        attack.graphics.destroy();
+                    }
                 }
             });
 
@@ -675,7 +735,7 @@ class GameScene extends Phaser.Scene {
     }
 }
 
-// Configuration et initialisation
+// ========== CONFIGURATION ET INITIALISATION ==========
 const config = {
     type: Phaser.AUTO,
     width: 800,
